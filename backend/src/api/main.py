@@ -1,0 +1,129 @@
+"""
+Main FastAPI application entry point
+"""
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+import logging
+import time
+from contextlib import asynccontextmanager
+
+from src.api.routes import auth, chat, assessment, dashboard, admin, profile, permissions, feedback, llm_providers, settings_routes
+from src.models.database import engine, Base
+from src.services.qdrant_service import qdrant_service
+from src.utils.config import settings
+
+# Configure logging with more detailed format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    logger.info("Starting NeurowellCA API...")
+    
+    # Create database tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS guardian_email VARCHAR(255)"))
+        await conn.execute(text("ALTER TABLE guardian_alerts ALTER COLUMN guardian_contact TYPE VARCHAR(255)"))
+    
+    # Initialize Qdrant collections
+    await qdrant_service.initialize_collections()
+    
+    logger.info("✅ Application started successfully")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down application...")
+    await engine.dispose()
+
+
+# Create FastAPI application
+app = FastAPI(
+    title="NeurowellCA API",
+    description="Mental Health Chatbot API with AI-powered support",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all HTTP requests"""
+    start_time = time.time()
+    
+    # Log request
+    logger.info(f"📥 {request.method} {request.url.path} - Client: {request.client.host}")
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Log response
+    process_time = time.time() - start_time
+    logger.info(f"📤 {request.method} {request.url.path} - Status: {response.status_code} - Time: {process_time:.3f}s")
+    
+    return response
+
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return JSONResponse({
+        "status": "healthy",
+        "service": "NeurowellCA API",
+        "version": "2.0.0"
+    })
+
+
+# Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(profile.router, prefix="/api/auth", tags=["Profile"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(assessment.router, prefix="/api/assessments", tags=["Assessments"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(admin.router, prefix="/api", tags=["Admin"])
+app.include_router(permissions.router, prefix="/api", tags=["RBAC"])
+app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
+app.include_router(llm_providers.router, prefix="/api", tags=["LLM Providers"])
+app.include_router(settings_routes.router, prefix="/api", tags=["Settings"])
+
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Welcome to NeurowellCA API",
+        "version": "2.0.0",
+        "docs": "/docs",
+        "health": "/health"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "src.api.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
