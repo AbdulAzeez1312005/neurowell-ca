@@ -139,36 +139,6 @@ Key API route groups under `backend/src/api/routes`:
 - `dashboard.py` - user statistics and summaries
 - `admin.py` - admin operations, including LLM provider management
 
-## Current Status Notes
-
-- Legacy local helper scripts (`.bat`, `.sh`, `.ps1`) were removed.
-- Project startup is now documented through direct commands and container workflows.
-- For production, prioritize managed cloud services over local container equivalents.
-
-## Troubleshooting
-
-### Frontend cannot reach backend
-
-- Verify `NEXT_PUBLIC_API_URL` points to the backend URL.
-- Verify backend CORS allows the frontend origin.
-
-### Backend database connection issues
-
-- Verify `DATABASE_URL`.
-- Verify PostgreSQL container (local) or Cloud SQL connectivity (cloud).
-
-### Qdrant initialization errors
-
-- Verify `QDRANT_URL` is reachable.
-- Verify `QDRANT_API_KEY` when using managed Qdrant.
-
-## Contributing
-
-1. Create a feature branch.
-2. Make focused changes.
-3. Run local validation for backend/frontend.
-4. Open a PR with a clear summary.
-
 ## License
 
 Add your project license information here.
